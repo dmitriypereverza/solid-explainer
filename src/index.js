@@ -1,25 +1,37 @@
-import { render, insert, template } from './packages/dolid/web';
-import { createSignal, onCleanup, createComponent } from './packages/dolid/src';
+import { render, insert, template, delegateEvents } from "./packages/dolid/web";
+import {
+  createSignal,
+  onCleanup,
+  createComponent,
+  createEffect,
+} from "./packages/dolid/src";
 
-const _tmpl$ = /*#__PURE__*/template(`<div>Count value is </div>`, 2);
+const _tmpl$ = /*#__PURE__*/ template(
+  `<div><div>Count value is </div><button>Increment</button></div>`,
+  6
+);
 
 const CountingComponent = () => {
   const [count, setCount] = createSignal(0);
-  const [count2, setCount2] = createSignal(2);
-  const interval = setInterval(() => {
-    setCount(c => c + 1);
-    setCount2(c => c + 2);
-  }, 1000);
-  onCleanup(() => clearInterval(interval));
+  createEffect(() => {
+    console.log("Change: " + count());
+  });
+
   return (() => {
     const _el$ = _tmpl$.cloneNode(true),
-          _el$2 = _el$.firstChild;
+      _el$2 = _el$.firstChild;
 
-    insert(_el$, count2, _el$2);
-    insert(_el$, count, null);
+    const _el$4 = _el$2.nextSibling;
 
+    insert(_el$2, count, null);
+    _el$4.$$click = () => setCount(count() + 1);
     return _el$;
   })();
 };
 
-render(() => createComponent(CountingComponent, {}), document.getElementById("app"));
+render(
+  () => createComponent(CountingComponent, {}),
+  document.getElementById("app")
+);
+
+delegateEvents(["click"]);

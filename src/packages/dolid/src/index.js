@@ -6,6 +6,7 @@ const signalOptions = {
 
 let ERROR = null;
 let runEffects = runQueue;
+
 const NOTPENDING = {};
 const STALE = 1;
 const PENDING = 2;
@@ -15,6 +16,7 @@ const UNOWNED = {
   context: null,
   owner: null,
 };
+
 var Owner = null;
 let Listener = null;
 let Pending = null;
@@ -23,6 +25,7 @@ let Effects = null;
 let ExecCount = 0;
 
 function createRoot(fn) {
+  debugger;
   const listener = Listener,
     owner = Owner,
     unowned = fn.length === 0,
@@ -61,10 +64,7 @@ function createSignal(value, options) {
   };
   return [readSignal.bind(s), setter];
 }
-function createComputed(fn, value) {
-  const c = createComputation(fn, value, true, STALE);
-  updateComputation(c);
-}
+
 function createRenderEffect(fn, value) {
   const c = createComputation(fn, value, false, STALE);
   updateComputation(c);
@@ -108,6 +108,7 @@ function batch(fn) {
   }, false);
   return result;
 }
+
 function untrack(fn) {
   let result,
     listener = Listener;
@@ -122,20 +123,6 @@ function onCleanup(fn) {
   else if (Owner.cleanups === null) Owner.cleanups = [fn];
   else Owner.cleanups.push(fn);
   return fn;
-}
-
-function createContext(defaultValue) {
-  const id = Symbol("context");
-  return {
-    id,
-    Provider: createProvider(id),
-    defaultValue,
-  };
-}
-
-function children(fn) {
-  const children = createMemo(fn);
-  return createMemo(() => resolveChildren(children()));
 }
 
 function readSignal() {
@@ -315,6 +302,7 @@ function runUserEffects(queue) {
   for (i = 0; i < userLength; i++) runTop(queue[i]);
   for (i = resume; i < queue.length; i++) runTop(queue[i]);
 }
+
 function lookUpstream(node, ignore) {
   node.state = 0;
 
@@ -327,6 +315,7 @@ function lookUpstream(node, ignore) {
     }
   }
 }
+
 function markDownstream(node) {
   for (let i = 0; i < node.observers.length; i += 1) {
     const o = node.observers[i];
@@ -338,6 +327,7 @@ function markDownstream(node) {
     }
   }
 }
+
 function cleanNode(node) {
   let i;
   if (node.sources) {
@@ -381,36 +371,6 @@ function lookup(owner, key) {
       : lookup(owner.owner, key)
     : undefined;
 }
-function resolveChildren(children) {
-  if (typeof children === "function" && !children.length)
-    return resolveChildren(children());
-  if (Array.isArray(children)) {
-    const results = [];
-    for (let i = 0; i < children.length; i++) {
-      const result = resolveChildren(children[i]);
-      Array.isArray(result)
-        ? results.push.apply(results, result)
-        : results.push(result);
-    }
-    return results;
-  }
-  return children;
-}
-function createProvider(id) {
-  return function provider(props) {
-    let res;
-    createComputed(
-      () =>
-        (res = untrack(() => {
-          Owner.context = {
-            [id]: props.value,
-          };
-          return children(() => props.children);
-        }))
-    );
-    return res;
-  };
-}
 
 function createComponent(Comp, props) {
   return untrack(() => Comp(props || {}));
@@ -423,4 +383,5 @@ export {
   createSignal,
   onCleanup,
   createEffect,
+  createMemo,
 };

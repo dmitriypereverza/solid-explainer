@@ -1,7 +1,4 @@
-import {
-  createRenderEffect,
-  createRoot,
-} from '../src';
+import { createRenderEffect, createRoot } from "../src";
 
 function reconcileArrays(parentNode, a, b) {
   let bLength = b.length,
@@ -22,7 +19,12 @@ function reconcileArrays(parentNode, a, b) {
       bEnd--;
     }
     if (aEnd === aStart) {
-      const node = bEnd < bLength ? (bStart ? b[bStart - 1].nextSibling : b[bEnd - bStart]) : after;
+      const node =
+        bEnd < bLength
+          ? bStart
+            ? b[bStart - 1].nextSibling
+            : b[bEnd - bStart]
+          : after;
       while (bStart < bEnd) parentNode.insertBefore(b[bStart++], node);
     } else if (bEnd === bStart) {
       while (aStart < aEnd) {
@@ -60,10 +62,9 @@ function reconcileArrays(parentNode, a, b) {
   }
 }
 
-
 function render(code, element, init) {
   let disposer;
-  createRoot(dispose => {
+  createRoot((dispose) => {
     disposer = dispose;
     element === document
       ? code()
@@ -75,24 +76,27 @@ function render(code, element, init) {
   };
 }
 
-
 function insert(parent, accessor, marker, initial) {
   if (marker !== undefined && !initial) initial = [];
-  if (typeof accessor !== "function") return insertExpression(parent, accessor, initial, marker);
-  createRenderEffect(current => insertExpression(parent, accessor(), current, marker), initial);
+  if (typeof accessor !== "function") {
+    return insertExpression(parent, accessor, initial, marker);
+  }
+  createRenderEffect(
+    (current) => insertExpression(parent, accessor(), current, marker),
+    initial
+  );
 }
 
 function isTextNode(node) {
-    // https://developer.mozilla.org/ru/docs/Web/API/Node/nodeType#:~:text=TEXT_NODE,3
-    return node && node.nodeType === 3;
+  // https://developer.mozilla.org/ru/docs/Web/API/Node/nodeType#:~:text=TEXT_NODE,3
+  return node && node.nodeType === 3;
 }
 
 function insertExpression(parent, value, current, marker, unwrapArray) {
   while (typeof current === "function") {
-      // noinspection JSUnresolvedFunction
-      current = current();
+    // noinspection JSUnresolvedFunction
+    current = current();
   }
-  debugger;
   if (value === current) return current;
   const t = typeof value,
     multi = marker !== undefined;
@@ -123,7 +127,9 @@ function insertExpression(parent, value, current, marker, unwrapArray) {
   } else if (Array.isArray(value)) {
     const array = [];
     if (normalizeIncomingArray(array, value, unwrapArray)) {
-      createRenderEffect(() => (current = insertExpression(parent, array, current, marker, true)));
+      createRenderEffect(
+        () => (current = insertExpression(parent, array, current, marker, true))
+      );
       return () => current;
     }
     if (array.length === 0) {
@@ -140,7 +146,8 @@ function insertExpression(parent, value, current, marker, unwrapArray) {
     current = array;
   } else if (value instanceof Node) {
     if (Array.isArray(current)) {
-      if (multi) return (current = cleanChildren(parent, current, marker, value));
+      if (multi)
+        return (current = cleanChildren(parent, current, marker, value));
       cleanChildren(parent, current, null, value);
     } else if (current == null || current === "" || !parent.firstChild) {
       parent.appendChild(value);
@@ -149,7 +156,6 @@ function insertExpression(parent, value, current, marker, unwrapArray) {
   } else;
   return current;
 }
-
 
 function normalizeIncomingArray(normalized, array, unwrap) {
   let dynamic = false;
@@ -167,7 +173,10 @@ function normalizeIncomingArray(normalized, array, unwrap) {
       if (unwrap) {
         while (typeof item === "function") item = item();
         dynamic =
-          normalizeIncomingArray(normalized, Array.isArray(item) ? item : [item]) || dynamic;
+          normalizeIncomingArray(
+            normalized,
+            Array.isArray(item) ? item : [item]
+          ) || dynamic;
       } else {
         normalized.push(item);
         dynamic = true;
@@ -177,7 +186,8 @@ function normalizeIncomingArray(normalized, array, unwrap) {
   return dynamic;
 }
 function appendNodes(parent, array, marker) {
-  for (let i = 0, len = array.length; i < len; i++) parent.insertBefore(array[i], marker);
+  for (let i = 0, len = array.length; i < len; i++)
+    parent.insertBefore(array[i], marker);
 }
 
 // update children nodes. Replace some node with new node with actual value
@@ -191,7 +201,9 @@ function cleanChildren(parent, current, marker, replacement) {
       if (node !== el) {
         const isParent = el.parentNode === parent;
         if (!inserted && !i)
-          isParent ? parent.replaceChild(node, el) : parent.insertBefore(node, marker);
+          isParent
+            ? parent.replaceChild(node, el)
+            : parent.insertBefore(node, marker);
         else isParent && el.remove();
       } else inserted = true;
     }
@@ -199,13 +211,11 @@ function cleanChildren(parent, current, marker, replacement) {
   return [node];
 }
 
-
 function template(html) {
   const t = document.createElement("template");
   t.innerHTML = html;
   return t.content.firstChild;
 }
 
-export {
-    render, insert, template
-};
+export { delegateEvents } from "./events";
+export { render, insert, template };
