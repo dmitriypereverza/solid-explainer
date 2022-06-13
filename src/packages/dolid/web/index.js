@@ -74,13 +74,7 @@ function render(code, element, init) {
     element.textContent = "";
   };
 }
-function template(html, check, isSVG) {
-  const t = document.createElement("template");
-  t.innerHTML = html;
-  let node = t.content.firstChild;
-  if (isSVG) node = node.firstChild;
-  return node;
-}
+
 
 function insert(parent, accessor, marker, initial) {
   if (marker !== undefined && !initial) initial = [];
@@ -88,20 +82,27 @@ function insert(parent, accessor, marker, initial) {
   createRenderEffect(current => insertExpression(parent, accessor(), current, marker), initial);
 }
 
+function isTextNode(node) {
+    // https://developer.mozilla.org/ru/docs/Web/API/Node/nodeType#:~:text=TEXT_NODE,3
+    return node && node.nodeType === 3;
+}
+
 function insertExpression(parent, value, current, marker, unwrapArray) {
   while (typeof current === "function") {
       // noinspection JSUnresolvedFunction
       current = current();
   }
+  debugger;
   if (value === current) return current;
   const t = typeof value,
     multi = marker !== undefined;
   parent = (multi && current[0] && current[0].parentNode) || parent;
+
   if (t === "string" || t === "number") {
     if (t === "number") value = value.toString();
     if (multi) {
       let node = current[0];
-      if (node && node.nodeType === 3) {
+      if (isTextNode(node)) {
         node.data = value;
       } else node = document.createTextNode(value);
       current = cleanChildren(parent, current, marker, node);
@@ -148,6 +149,8 @@ function insertExpression(parent, value, current, marker, unwrapArray) {
   } else;
   return current;
 }
+
+
 function normalizeIncomingArray(normalized, array, unwrap) {
   let dynamic = false;
   for (let i = 0, len = array.length; i < len; i++) {
@@ -176,6 +179,8 @@ function normalizeIncomingArray(normalized, array, unwrap) {
 function appendNodes(parent, array, marker) {
   for (let i = 0, len = array.length; i < len; i++) parent.insertBefore(array[i], marker);
 }
+
+// update children nodes. Replace some node with new node with actual value
 function cleanChildren(parent, current, marker, replacement) {
   if (marker === undefined) return (parent.textContent = "");
   const node = replacement || document.createTextNode("");
@@ -194,6 +199,12 @@ function cleanChildren(parent, current, marker, replacement) {
   return [node];
 }
 
+
+function template(html) {
+  const t = document.createElement("template");
+  t.innerHTML = html;
+  return t.content.firstChild;
+}
 
 export {
     render, insert, template
