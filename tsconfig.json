@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "module": "System",
+    "target": "es5",
+    "sourceMap": true,
+    "allowJs": true,
+    "baseUrl": "./",
+    "outFile": "public/bundle.js"
+  },
+  "exclude": [
+    "node_modules"
+  ]
+}
