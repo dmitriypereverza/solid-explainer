@@ -17,15 +17,19 @@ const UNOWNED = {
   owner: null,
 };
 
+/** Контекст выполнения */
 var Owner = null;
+/** Текущий контекст выполнения */
 let Listener = null;
+/** В процессе ли мы батчинга изменений */
 let Pending = null;
+/** Чистые обновления */
 let Updates = null;
+/** Обновления, которые могут породить новые вычисления */
 let Effects = null;
 let ExecCount = 0;
 
 function createRoot(fn) {
-  debugger;
   const listener = Listener,
     owner = Owner,
     unowned = fn.length === 0,
@@ -57,6 +61,7 @@ function createSignal(value, options) {
     comparator: options.equals || undefined,
   };
   const setter = (value) => {
+    debugger;
     if (typeof value === "function") {
       value = value(s.pending !== NOTPENDING ? s.pending : s.value);
     }
@@ -263,6 +268,7 @@ function runUpdates(fn, init) {
   } catch (err) {
     handleError(err);
   } finally {
+    debugger;
     Updates = null;
     if (!wait) Effects = null;
   }
