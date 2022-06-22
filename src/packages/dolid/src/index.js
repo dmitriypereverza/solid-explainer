@@ -5,7 +5,7 @@ const signalOptions = {
 };
 
 let ERROR = null;
-let runEffects = runQueue;
+let runEffects = runUserEffects;
 
 const NOTPENDING = {};
 const STALE = 1;
@@ -21,9 +21,9 @@ const UNOWNED = {
 var Owner = null;
 /** Текущий контекст выполнения */
 let Listener = null;
-/** В процессе ли мы батчинга изменений */
+/** Аккумулятор изменений во время батчинга */
 let Pending = null;
-/** Чистые обновления */
+/** Чистые обновления (setState) */
 let Updates = null;
 /** Обновления, которые могут породить новые вычисления */
 let Effects = null;
@@ -54,10 +54,14 @@ function createRoot(fn) {
 function createSignal(value, options) {
   options = options ? Object.assign({}, signalOptions, options) : signalOptions;
   const s = {
+    /** Внутренне значение сигнала  */
     value,
+
     observers: null,
     observerSlots: null,
+    /**   */
     pending: NOTPENDING,
+    /** Ф-ция сравнения значений  */
     comparator: options.equals || undefined,
   };
   const setter = (value) => {
@@ -70,17 +74,23 @@ function createSignal(value, options) {
   return [readSignal.bind(s), setter];
 }
 
-function createRenderEffect(fn, value) {
-  const c = createComputation(fn, value, false, STALE);
-  updateComputation(c);
-}
 function createEffect(fn, value) {
-  runEffects = runUserEffects;
   const c = createComputation(fn, value, false, STALE);
   c.user = true;
   Effects ? Effects.push(c) : updateComputation(c);
 }
 
+/**
+ * A render effect is a computation similar to a regular effect (as created by createEffect),
+ * but differs in when Solid schedules the first execution of the effect function.
+ * While createEffect waits for the current rendering phase to be complete, createRenderEffect immediately calls the function
+ * */
+function createRenderEffect(fn, value) {
+  const c = createComputation(fn, value, false, STALE);
+  updateComputation(c);
+}
+
+/** Создает вычисляемое значение, это одновременно и signal и computation */
 function createMemo(fn, value, options) {
   options = options ? Object.assign({}, signalOptions, options) : signalOptions;
   const c = createComputation(fn, value, true, 0);
@@ -92,6 +102,7 @@ function createMemo(fn, value, options) {
   return readSignal.bind(c);
 }
 
+/** Группирует вычисления и после разом их применяет */
 function batch(fn) {
   if (Pending) return fn();
   let result;
@@ -114,6 +125,14 @@ function batch(fn) {
   return result;
 }
 
+function onCleanup(fn) {
+  if (Owner === null);
+  else if (Owner.cleanups === null) Owner.cleanups = [fn];
+  else Owner.cleanups.push(fn);
+  return fn;
+}
+
+/** Выполняем ф-цию без внешних слушателей */
 function untrack(fn) {
   let result,
     listener = Listener;
@@ -121,13 +140,6 @@ function untrack(fn) {
   result = fn();
   Listener = listener;
   return result;
-}
-
-function onCleanup(fn) {
-  if (Owner === null);
-  else if (Owner.cleanups === null) Owner.cleanups = [fn];
-  else Owner.cleanups.push(fn);
-  return fn;
 }
 
 function readSignal() {
@@ -156,7 +168,8 @@ function readSignal() {
   }
   return this.value;
 }
-function writeSignal(node, value, isComp) {
+
+function writeSignal(node, value) {
   if (Pending) {
     if (node.pending === NOTPENDING) Pending.push(node);
     node.pending = value;
@@ -184,6 +197,7 @@ function writeSignal(node, value, isComp) {
   }
   return value;
 }
+
 function updateComputation(node) {
   if (!node.fn) return;
   cleanNode(node);
@@ -195,6 +209,7 @@ function updateComputation(node) {
   Listener = listener;
   Owner = owner;
 }
+
 function runComputation(node, value, time) {
   let nextValue;
   try {
@@ -290,10 +305,6 @@ function completeUpdates(wait) {
     Effects = null;
   }
   if (res) res();
-}
-
-function runQueue(queue) {
-  for (let i = 0; i < queue.length; i++) runTop(queue[i]);
 }
 
 function runUserEffects(queue) {
