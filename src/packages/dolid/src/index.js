@@ -29,6 +29,11 @@ let Updates = null;
 let Effects = null;
 let ExecCount = 0;
 
+/**
+ * Creates a new non-tracked owner scope that doesn't auto-dispose.
+ * This is useful for nested reactive scopes that you do not wish
+ * to release when the parent re-evaluates.
+ */
 function createRoot(fn) {
   const listener = Listener,
     owner = Owner,
@@ -51,6 +56,12 @@ function createRoot(fn) {
     Owner = owner;
   }
 }
+
+/**
+ * Signals are the most basic reactive primitive.
+ * They track a single value (which can be any JavaScript object)
+ * that changes over time.
+ */
 function createSignal(value, options) {
   options = options ? Object.assign({}, signalOptions, options) : signalOptions;
   const s = {
@@ -74,6 +85,16 @@ function createSignal(value, options) {
   return [readSignal.bind(s), setter];
 }
 
+/**
+ * Effects are a general way to make arbitrary
+ * code ("side effects") run whenever dependencies
+ * change, e.g., to modify the DOM manually.
+ * CreateEffect creates a new computation that
+ * runs the given function in a tracking scope,
+ * thus automatically tracking its dependencies,
+ * and automatically reruns the function whenever
+ * the dependencies update.
+ */
 function createEffect(fn, value) {
   const c = createComputation(fn, value, false, STALE);
   c.user = true;
@@ -125,6 +146,7 @@ function batch(fn) {
   return result;
 }
 
+/** Регистрирует ф-цию очистки */
 function onCleanup(fn) {
   if (Owner === null);
   else if (Owner.cleanups === null) Owner.cleanups = [fn];
@@ -132,7 +154,12 @@ function onCleanup(fn) {
   return fn;
 }
 
-/** Выполняем ф-цию без внешних слушателей */
+/**
+ * Выполняем ф-цию без внешних слушателей.
+ *
+ * Ignores tracking any of the dependencies
+ * in the executing code block and returns the value.
+ * */
 function untrack(fn) {
   let result,
     listener = Listener;
