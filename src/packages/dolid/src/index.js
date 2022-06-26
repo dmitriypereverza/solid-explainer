@@ -13,7 +13,6 @@ const PENDING = 2;
 const UNOWNED = {
   owned: null,
   cleanups: null,
-  context: null,
   owner: null,
 };
 
@@ -43,7 +42,6 @@ function createRoot(fn) {
       : {
           owned: null,
           cleanups: null,
-          context: null,
           owner,
         },
     updateFn = unowned ? fn : () => fn(() => cleanNode(root));
@@ -67,7 +65,6 @@ function createSignal(value, options) {
   const s = {
     /** Внутренне значение сигнала  */
     value,
-
     observers: null,
     observerSlots: null,
     /**   */
@@ -76,7 +73,6 @@ function createSignal(value, options) {
     comparator: options.equals || undefined,
   };
   const setter = (value) => {
-    debugger;
     if (typeof value === "function") {
       value = value(s.pending !== NOTPENDING ? s.pending : s.value);
     }
@@ -169,6 +165,11 @@ function untrack(fn) {
   return result;
 }
 
+/**
+ * Calling the getter (e.g., count() or ready()) returns the current value of the Signal.
+ * Crucial to automatic dependency tracking, calling the getter within a tracking scope causes
+ * the calling function to depend on this Signal, so that function will rerun if the Signal gets updated.
+ */
 function readSignal() {
   if (this.sources && this.state) {
     const updates = Updates;
@@ -196,6 +197,13 @@ function readSignal() {
   return this.value;
 }
 
+/**
+ * Calling the setter (e.g., setCount(nextCount) or setReady(nextReady)) sets
+ * the Signal's value and updates the Signal (triggering dependents to rerun) if the value actually changed (see details below).
+ * As its only argument, the setter takes either the new value for the signal,
+ * or a function that maps the last value of the signal to a new value.
+ * The setter also returns the updated value.
+ */
 function writeSignal(node, value) {
   if (Pending) {
     if (node.pending === NOTPENDING) Pending.push(node);
@@ -254,15 +262,22 @@ function runComputation(node, value, time) {
 function createComputation(fn, init, pure, state = STALE) {
   const c = {
     fn,
+    /** Состояние */
     state: state,
     updatedAt: null,
+    /** Родитель данного вычисления */
     owned: null,
+    /** За какими значениями наблюдает computation */
     sources: null,
+    /** Индекс источника */
     sourceSlots: null,
+    /** Ф-ции очистки (onCleanup) */
     cleanups: null,
+    /** Возвращаемое значение для вычисления */
     value: init,
+    /** Владелец вычисления */
     owner: Owner,
-    context: null,
+    /** Чистое ли вычисление. Или может ли при выполнении вычисления добавиться новые зависимости */
     pure,
   };
   if (Owner === null);
@@ -399,21 +414,12 @@ function cleanNode(node) {
     node.cleanups = null;
   }
   node.state = 0;
-  node.context = null;
 }
 
 function handleError(err) {
-  const fns = ERROR && lookup(Owner, ERROR);
+  const fns = ERROR;
   if (!fns) throw err;
   fns.forEach((f) => f(err));
-}
-
-function lookup(owner, key) {
-  return owner
-    ? owner.context && owner.context[key] !== undefined
-      ? owner.context[key]
-      : lookup(owner.owner, key)
-    : undefined;
 }
 
 function createComponent(Comp, props) {
