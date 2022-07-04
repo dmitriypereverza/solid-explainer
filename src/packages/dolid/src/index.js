@@ -13,6 +13,7 @@ const PENDING = 2;
 const UNOWNED = {
   owned: null,
   cleanups: null,
+  context: null,
   owner: null,
 };
 
@@ -42,6 +43,7 @@ function createRoot(fn) {
       : {
           owned: null,
           cleanups: null,
+          context: null,
           owner,
         },
     updateFn = unowned ? fn : () => fn(() => cleanNode(root));
@@ -65,9 +67,11 @@ function createSignal(value, options) {
   const s = {
     /** Внутренне значение сигнала  */
     value,
+    /** Слушатели сигнала */
     observers: null,
+    /** Индексы слушателей */
     observerSlots: null,
-    /**   */
+    /** Вычисляется ли уже? */
     pending: NOTPENDING,
     /** Ф-ция сравнения значений  */
     comparator: options.equals || undefined,
@@ -151,21 +155,6 @@ function onCleanup(fn) {
 }
 
 /**
- * Выполняем ф-цию без внешних слушателей.
- *
- * Ignores tracking any of the dependencies
- * in the executing code block and returns the value.
- * */
-function untrack(fn) {
-  let result,
-    listener = Listener;
-  Listener = null;
-  result = fn();
-  Listener = listener;
-  return result;
-}
-
-/**
  * Calling the getter (e.g., count() or ready()) returns the current value of the Signal.
  * Crucial to automatic dependency tracking, calling the getter within a tracking scope causes
  * the calling function to depend on this Signal, so that function will rerun if the Signal gets updated.
@@ -233,32 +222,6 @@ function writeSignal(node, value) {
   return value;
 }
 
-function updateComputation(node) {
-  if (!node.fn) return;
-  cleanNode(node);
-  const owner = Owner,
-    listener = Listener,
-    time = ExecCount;
-  Listener = Owner = node;
-  runComputation(node, node.value, time);
-  Listener = listener;
-  Owner = owner;
-}
-
-function runComputation(node, value, time) {
-  let nextValue;
-  try {
-    nextValue = node.fn(value);
-  } catch (err) {
-    handleError(err);
-  }
-  if (!node.updatedAt || node.updatedAt <= time) {
-    if (node.observers && node.observers.length) {
-      writeSignal(node, nextValue, true);
-    } else node.value = nextValue;
-    node.updatedAt = time;
-  }
-}
 function createComputation(fn, init, pure, state = STALE) {
   const c = {
     fn,
@@ -278,6 +241,7 @@ function createComputation(fn, init, pure, state = STALE) {
     /** Владелец вычисления */
     owner: Owner,
     /** Чистое ли вычисление. Или может ли при выполнении вычисления добавиться новые зависимости */
+    context: null,
     pure,
   };
   if (Owner === null);
@@ -287,6 +251,39 @@ function createComputation(fn, init, pure, state = STALE) {
   }
   return c;
 }
+
+/**
+ * Сбрасываем подписки по ноде, так как зависимости нужно пересчитать.
+ * И запускает вычисление.
+ */
+function updateComputation(node) {
+  if (!node.fn) return;
+  cleanNode(node);
+  const owner = Owner,
+    listener = Listener,
+    time = ExecCount;
+  Listener = Owner = node;
+  runComputation(node, node.value, time);
+  Listener = listener;
+  Owner = owner;
+}
+
+/** Выполняем вычисление и оповещает всех что подписан на него */
+function runComputation(node, value, time) {
+  let nextValue;
+  try {
+    nextValue = node.fn(value);
+  } catch (err) {
+    handleError(err);
+  }
+  if (!node.updatedAt || node.updatedAt <= time) {
+    if (node.observers && node.observers.length) {
+      writeSignal(node, nextValue, true);
+    } else node.value = nextValue;
+    node.updatedAt = time;
+  }
+}
+
 function runTop(node) {
   if (node.state === 0) return;
   if (node.state === PENDING) {
@@ -297,6 +294,7 @@ function runTop(node) {
     (node = node.owner) &&
     (!node.updatedAt || node.updatedAt < ExecCount)
   ) {
+    // if node.state equal STALE or PENDING
     if (node.state) ancestors.push(node);
   }
   for (let i = ancestors.length - 1; i >= 0; i--) {
@@ -311,6 +309,10 @@ function runTop(node) {
     }
   }
 }
+
+/**
+ * Создает контекст для обновлений и после выполнения колбэка применяет изменения
+ */
 function runUpdates(fn, init) {
   if (Updates) return fn();
   let wait = false;
@@ -325,10 +327,13 @@ function runUpdates(fn, init) {
   } catch (err) {
     handleError(err);
   } finally {
-    debugger;
     Updates = null;
     if (!wait) Effects = null;
   }
+}
+
+function runQueue(queue) {
+  for (let i = 0; i < queue.length; i++) runTop(queue[i]);
 }
 
 function completeUpdates(wait) {
@@ -395,12 +400,12 @@ function cleanNode(node) {
         index = node.sourceSlots.pop(),
         obs = source.observers;
       if (obs && obs.length) {
-        const n = obs.pop(),
-          s = source.observerSlots.pop();
+        const observer = obs.pop(),
+          observerSlot = source.observerSlots.pop();
         if (index < obs.length) {
-          n.sourceSlots[s] = index;
-          obs[index] = n;
-          source.observerSlots[index] = s;
+          observer.sourceSlots[observerSlot] = index;
+          obs[index] = observer;
+          source.observerSlots[index] = observerSlot;
         }
       }
     }
@@ -416,10 +421,41 @@ function cleanNode(node) {
   node.state = 0;
 }
 
+/**
+ * onError - run an effect whenever an error is thrown within the context of the child scopes
+ * @param fn an error handler that receives the error
+ *
+ * * If the error is thrown again inside the error handler, it will trigger the next available parent handler
+ *
+ * @description https://www.solidjs.com/docs/latest/api#onerror
+ */
+function onError(fn) {
+  ERROR || (ERROR = Symbol("error"));
+  if (Owner === null);
+  else if (Owner.context === null) Owner.context = { [ERROR]: [fn] };
+  else if (!Owner.context[ERROR]) Owner.context[ERROR] = [fn];
+  else Owner.context[ERROR].push(fn);
+}
+
 function handleError(err) {
-  const fns = ERROR;
+  const fns = ERROR && Owner && Owner.context[ERROR];
   if (!fns) throw err;
   fns.forEach((f) => f(err));
+}
+
+/**
+ * Выполняем ф-цию без внешних слушателей.
+ *
+ * Ignores tracking any of the dependencies
+ * in the executing code block and returns the value.
+ * */
+function untrack(fn) {
+  let result,
+    listener = Listener;
+  Listener = null;
+  result = fn();
+  Listener = listener;
+  return result;
 }
 
 function createComponent(Comp, props) {
@@ -432,6 +468,7 @@ export {
   createComponent,
   createSignal,
   onCleanup,
+  onError,
   createEffect,
   createMemo,
 };

@@ -63,7 +63,6 @@ function reconcileArrays(parentNode, a, b) {
 }
 
 function render(code, element, init) {
-  debugger;
   let disposer;
   createRoot((dispose) => {
     disposer = dispose;
