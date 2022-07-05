@@ -26,6 +26,7 @@ let Pending = null;
 let Updates = null;
 /** Обновления, которые могут породить новые вычисления */
 let Effects = null;
+/** Счетчик циклов обновлений */
 let ExecCount = 0;
 
 /**
